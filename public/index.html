@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Key Management System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .login-form {
+            padding: 40px;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        
+        .dashboard {
+            display: none;
+            padding: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        input, button {
+            width: 100%;
+            padding: 12px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #2980b9;
+        }
+        
+        .key-actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+        
+        .status-active { color: #27ae60; font-weight: bold; }
+        .status-paused { color: #f39c12; font-weight: bold; }
+        .status-revoked { color: #e74c3c; font-weight: bold; }
+        
+        .action-btn {
+            padding: 5px 10px;
+            margin: 0 2px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .btn-pause { background: #f39c12; color: white; }
+        .btn-resume { background: #27ae60; color: white; }
+        .btn-revoke { background: #e74c3c; color: white; }
+        .btn-delete { background: #7f8c8d; color: white; }
+        .btn-extend { background: #3498db; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔑 Key Management System</h1>
+            <div id="userInfo" style="display: none;">
+                <span id="username"></span>
+                <button onclick="logout()" style="width: auto; margin-left: 10px;">Logout</button>
+            </div>
+        </div>
+        
+        <div id="loginSection" class="login-form">
+            <h2>Admin Login</h2>
+            <div class="form-group">
+                <input type="text" id="loginUsername" placeholder="Username" required>
+            </div>
+            <div class="form-group">
+                <input type="password" id="loginPassword" placeholder="Password" required>
+            </div>
+            <button onclick="login()">Login</button>
+        </div>
+        
+        <div id="dashboardSection" class="dashboard">
+            <div class="key-actions">
+                <input type="text" id="newKeyOwner" placeholder="Customer Name">
+                <input type="number" id="newKeyDays" placeholder="Days" value="30">
+                <button onclick="createKey()">Create New Key</button>
+            </div>
+            
+            <h3>Active Keys</h3>
+            <div id="keysList"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://your-app.onrender.com/api'; // Replace with your render.com URL
+        let token = localStorage.getItem('token');
+        
+        if (token) {
+            showDashboard();
+        }
+        
+        async function login() {
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            try {
+                const response = await fetch(API_BASE + '/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    token = data.token;
+                    localStorage.setItem('token', token);
+                    showDashboard();
+                } else {
+                    alert('Login failed: ' + data.error);
+                }
+            } catch (error) {
+                alert('Login error: ' + error.message);
+            }
+        }
+        
+        function logout() {
+            localStorage.removeItem('token');
+            token = null;
+            document.getElementById('loginSection').style.display = 'block';
+            document.getElementById('dashboardSection').style.display = 'none';
+            document.getElementById('userInfo').style.display = 'none';
+        }
+        
+        async function showDashboard() {
+            document.getElementById('loginSection').style.display = 'none';
+            document.getElementById('dashboardSection').style.display = 'block';
+            document.getElementById('userInfo').style.display = 'flex';
+            loadKeys();
+        }
+        
+        async function createKey() {
+            const owner = document.getElementById('newKeyOwner').value;
+            const days = document.getElementById('newKeyDays').value;
+            
+            if (!owner) {
+                alert('Please enter customer name');
+                return;
+            }
+            
+            try {
+                const response = await fetch(API_BASE + '/keys', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({ owner, days })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    alert('Key created: ' + data.key);
+                    document.getElementById('newKeyOwner').value = '';
+                    loadKeys();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+        
+        async function loadKeys() {
+            try {
+                const response = await fetch(API_BASE + '/keys', {
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                });
+                
+                const keys = await response.json();
+                displayKeys(keys);
+            } catch (error) {
+                alert('Error loading keys: ' + error.message);
+            }
+        }
+        
+        function displayKeys(keys) {
+            const keysList = document.getElementById('keysList');
+            
+            if (keys.length === 0) {
+                keysList.innerHTML = '<p>No keys found</p>';
+                return;
+            }
+            
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Key</th>
+                            <th>Owner</th>
+                            <th>Created</th>
+                            <th>Expires</th>
+                            <th>Status</th>
+                            <th>Last Login</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            keys.forEach(key => {
+                const created = new Date(key.created_at).toLocaleDateString();
+                const expires = new Date(key.expires_at).toLocaleDateString();
+                const lastLogin = key.last_login ? new Date(key.last_login).toLocaleDateString() : 'Never';
+                const daysLeft = Math.ceil((new Date(key.expires_at) - new Date()) / (1000 * 60 * 60 * 24));
+                
+                html += `
+                    <tr>
+                        <td><code>${key.key}</code></td>
+                        <td>${key.owner}</td>
+                        <td>${created}</td>
+                        <td>${expires} (${daysLeft} days left)</td>
+                        <td class="status-${key.status}">${key.status}</td>
+                        <td>${lastLogin}</td>
+                        <td>
+                            ${key.status === 'active' ? 
+                                `<button class="action-btn btn-pause" onclick="updateKeyStatus('${key._id}', 'paused')">Pause</button>` :
+                                `<button class="action-btn btn-resume" onclick="updateKeyStatus('${key._id}', 'active')">Resume</button>`
+                            }
+                            <button class="action-btn btn-revoke" onclick="updateKeyStatus('${key._id}', 'revoked')">Revoke</button>
+                            <button class="action-btn btn-extend" onclick="extendKey('${key._id}')">Extend</button>
+                            <button class="action-btn btn-delete" onclick="deleteKey('${key._id}')">Delete</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table>';
+            keysList.innerHTML = html;
+        }
+        
+        async function updateKeyStatus(keyId, status) {
+            try {
+                const response = await fetch(API_BASE + '/keys/' + keyId, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({ status })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    alert('Key status updated');
+                    loadKeys();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+        
+        async function extendKey(keyId) {
+            const days = prompt('Enter number of days to extend:');
+            if (days && !isNaN(days)) {
+                try {
+                    const response = await fetch(API_BASE + '/keys/' + keyId + '/extend', {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + token
+                        },
+                        body: JSON.stringify({ days })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        alert('Key extended successfully');
+                        loadKeys();
+                    } else {
+                        alert('Error: ' + data.error);
+                    }
+                } catch (error) {
+                    alert('Error: ' + error.message);
+                }
+            }
+        }
+        
+        async function deleteKey(keyId) {
+            if (confirm('Are you sure you want to delete this key?')) {
+                try {
+                    const response = await fetch(API_BASE + '/keys/' + keyId, {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': 'Bearer ' + token
+                        }
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        alert('Key deleted');
+                        loadKeys();
+                    } else {
+                        alert('Error: ' + data.error);
+                    }
+                } catch (error) {
+                    alert('Error: ' + error.message);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
